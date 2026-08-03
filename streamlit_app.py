@@ -19,7 +19,7 @@ ui.title("PTP Quantum Traffic Grid v5")
 ui.write("Status: Running multi-protocol SOCKS5/HTTP asynchronous server mesh.")
 ui.write("Security: Layer-7 Fingerprinting, Deep Referrer Spoofing, and Tier-1 Geo Filtering Active.")
 
-PTP_LINK = "https://adz2pro.com"
+PTP_LINK = "https://adz2pro.com/ptp/promote-201"
 MAX_CONCURRENT_TASKS = 150  # Blasts 150 parallel nodes simultaneously
 
 # HIGH-QUALITY REPOSITORIES: Curated lists filtering clean HTTP and SOCKS5 channels
