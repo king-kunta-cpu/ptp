@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Server Cost &amp; Backup Planner — Gus</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+main{max-width:900px;margin:0 auto}h1{font-size:22px}p.tag{color:#8b949e}
+input,select{background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px;border-radius:6px;width:100%;box-sizing:border-box;font:inherit}
+label{display:block;margin:10px 0 4px;font-size:13px;color:#8b949e}
+button{background:#238636;border:0;color:#fff;padding:10px 18px;border-radius:6px;font:inherit;cursor:pointer;margin-top:14px}
+button.alt{background:#21262d;border:1px solid #30363d}
+pre{background:#161b22;border:1px solid #30363d;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.foot{margin-top:28px;font-size:12px;color:#8b949e;border-top:1px solid #21262d;padding-top:12px}
+a{color:#58a6ff}.hidden{display:none}
+</style></head><body><main>
+<h1>Server Cost &amp; Backup Planner</h1>
+<p class="tag">Right-size a VPS, price it, and get the backup + monitoring scripts. Free tool by Gus.</p>
+<div class="grid">
+<div><label>Workload</label><select id="wl">
+<option value="light">Light — personal sites, dashboards</option>
+<option value="mid">Medium — few apps, modest traffic</option>
+<option value="heavy">Heavy — multiple services, real users</option>
+</select></div>
+<div><label>Uptime target</label><select id="up"><option>99.0</option><option selected>99.5</option><option>99.9</option></select></div>
+<div><label>RPO — max acceptable data loss (hours)</label><select id="rpo"><option>1</option><option selected>4</option><option>12</option><option>24</option></select></div>
+<div><label>Provider</label><select id="prov"><option>Hetzner</option><option>Ovh</option><option>DigitalOcean</option><option>Generic VPS</option></select></div>
+</div>
+<button onclick="gen()">Plan it</button>
+<pre id="out" class="hidden"></pre>
+<div id="btns"hidden></div>
+<p class="foot">Free tool by Gus — solo operator infrastructure · Custom builds: <a href="mailto:CONTACT" id="ce">CONTACT</a> · <a href="lightning:SharkSkin@coinos.io">Buy me a coffee ⚡</a></p>
+<script>
+var CONTACT="CONTACT"; // SETUP: replace with persona mailbox
+document.getElementById('ce').textContent=CONTACT;
+document.getElementById('ce').href="mailto:"+CONTACT;
+var TIERS={
+ Hetzner:[["CX22 — 2 vCPU / 4GB / 40GB",3.29],["CX32 — 4 vCPU / 8GB / 80GB",5.19],["CX42 — 8 vCPU / 16GB / 160GB",9.49]],
+ Ovh:[["Eco S1 — 2 vCPU / 2GB / 40GB",3.50],["Eco S2 — 2 vCPU / 4GB / 80GB",6.00],["Advance-1 — 4 vCPU / 8GB",18.00]],
+ DigitalOcean:[["Basic 2vCPU/4GB",12.00],["Basic 4vCPU/8GB",24.00],["Basic 8vCPU/16GB",48.00]],
+ "Generic VPS":[["2 vCPU / 4GB",4.00],["4 vCPU / 8GB",8.00],["8 vCPU / 16GB",16.00]]
+};
+var NEED={light:0,mid:1,heavy:2};
+var lastMd="";
+function gen(){
+ var wl=document.getElementById('wl').value, up=document.getElementById('up').value,
+     rpo=parseInt(document.getElementById('rpo').value,10), prov=document.getElementById('prov').value;
+ var tiers=TIERS[prov]||TIERS.Hetzner;
+ var idx=Math.min(NEED[wl],tiers.length-1);
+ var pick=tiers[idx];
+ var downAllowed=(up==="99.0")?"<10h/yr":"(99.9 needs monitoring + auto-restart; still fine on a single VPS with fast reboots)";
+ var cronMin=rpo<=1?"0 */1 * * *":"0 * * * *"; // restic every hour when RPO=1 else every hour snapshots + note
+ var L=[];
+ L.push("# Server plan — "+prov);
+ L.push("");
+ L.push("## Recommendation");
+ L.push("- Tier: "+pick[0]);
+ L.push("- Price: ~$"+pick[1].toFixed(2)+"/mo (~$"+(pick[1]*12).toFixed(0)+"/yr)");
+ L.push("- Uptime target "+up+"%: "+downAllowed);
+ L.push("- RPO "+rpo+"h: backups below run hourly; off-site copy every 6h keeps you under "+rpo+"h.");
+ L.push("- Save: pick the smaller tier + swap if you hit 80% RAM for 3 days straight (monitor first, upgrade second).");
+ L.push("");
+ L.push("## Backup script — /usr/local/bin/backup.sh (restic → B2/S3/rclone)");
+ L.push("```bash");
+ L.push("#!/usr/bin/env bash");
+ L.push("set -euo pipefail");
+ L.push("REPO=${RESTIC_REPO:?set restic repo in env}");
+ L.push("export RESTIC_PASSWORD_FILE=/etc/restic/password");
+ L.push("snap() { restic -v backup /var/www /etc /home /opt/app-data --exclude-pattern /home/*/node_modules; }");
+ L.push("snap");
+ L.push("restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 12 --prune");
+ L.push("# off-site copy of the restic index (run from cron, second location)");
+ L.push("```");
+ L.push("```cron");
+ L.push(cronMin+" root /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1");
+ L.push("0 */6 * * * root restic copy --target \"b2:offsite\" latest >> /var/log/backup.log 2>&1");
+ L.push("```");
+ L.push("");
+ L.push("## Uptime + log checks");
+ L.push("```bash");
+ L.push("# /etc/cron.d/health — curl check + mail/discord webhook on failure");
+ L.push("*/5 * * * * root curl -fsS -m 10 http://127.0.0.1:8080/healthz >/dev/null || (systemctl restart nginx 2>/dev/null; logger 'healthz failed, restarted nginx')");
+ L.push("# disk guard: alert at 85%");
+ L.push("0 */6 * * * root df --output=pcent / | tail -1 | awk '{gsub(\"%\",\"\"); if ($1+0 >= 85) logger -p local0.err \"disk \" $1 \"% full\"}'");
+ L.push("```");
+ L.push("");
+ L.push("## Monitoring checklist");
+ L.push("- [ ] uptime-kuma (or healthchecks.io) pings every 60s from an external node");
+ L.push("- [ ] journald capped: SystemMaxUse=200M");
+ L.push("- [ ] ufw on; SSH key-only; fail2ban for ssh");
+ L.push("- [ ] unattended-upgrades (security only)");
+ L.push("- [ ] backup test: RESTORE drill once a month (a backup you never restored is a rumor)");
+ L.push("- [ ] costs: monthly price check — VPS prices move, so do your options");
+ L.push("");
+ L.push("---");
+ L.push("Planned by Gus's free tool · Custom infra setups: "+CONTACT);
+ lastMd=L.join("\n");
+ var o=document.getElementById('out');o.textContent=lastMd;o.classList.remove('hidden');
+ document.getElementById('btns').classList.remove('hidden');
+}
+function copy(){navigator.clipboard.writeText(lastMd);}
+</script></body></html>

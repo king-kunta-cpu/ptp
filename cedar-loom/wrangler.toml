@@ -1,0 +1,28 @@
+name = "cedar-loom"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# KV for caching Whop products 5m
+# Create with: npx wrangler kv:namespace create "KV"
+# kv_namespaces = [
+#   { binding = "KV", id = "your-kv-id" }
+# ]
+
+[triggers]
+crons = ["0 22 * * 5", "0 22 * * 6"]  # Fri 22 UTC = Sat 00 Harare, Sat 22 UTC = Sun 00 Harare
+
+[vars]
+# Public vars
+TZ = "Africa/Harare"
+
+# Secrets - set with:
+# npx wrangler secret put GH_TOKEN
+# npx wrangler secret put GH_REPO
+# npx wrangler secret put WHOP_API_KEY
+# npx wrangler secret put WHOP_COMPANY_ID
+# npx wrangler secret put APPS_SCRIPT_WEBHOOK
+# npx wrangler secret put BSKY_APP_PASSWORD (optional, better per-persona)
+
+# Example:
+# GH_REPO = "king-kunta-cpu/ptp"

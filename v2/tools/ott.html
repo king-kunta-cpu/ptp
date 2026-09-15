@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CSS Layout Playground — Ott</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+main{max-width:900px;margin:0 auto}h1{font-size:22px}p.tag{color:#8b949e}
+select,input{background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px;border-radius:6px;width:100%;box-sizing:border-box;font:inherit}
+label{display:block;margin:10px 0 4px;font-size:13px;color:#8b949e}
+button{background:#238636;border:0;color:#fff;padding:10px 18px;border-radius:6px;font:inherit;cursor:pointer;margin-top:14px}
+button.alt{background:#21262d;border:1px solid #30363d}
+pre{background:#161b22;border:1px solid #30363d;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5}
+.foot{margin-top:28px;font-size:12px;color:#8b949e;border-top:1px solid #21262d;padding-top:12px}
+a{color:#58a6ff}.hidden{display:none}
+</style></head><body><main>
+<h1>CSS Layout Playground</h1>
+<p class="tag">Working snippets for modern web platform layout: subgrid, container queries, view transitions. Free tool by Ott.</p>
+<label>Scenario</label>
+<select id="sc">
+<option value="sidebar">Sidebar + content (responsive)</option>
+<option value="cards">Auto-fit card grid</option>
+<option value="subgrid">Table aligned with subgrid</option>
+<option value="container">Container-query navigation</option>
+<option value="vtrans">View-transitions page swap</option>
+</select>
+<button onclick="gen()">Generate</button>
+<pre id="out" class="hidden"></pre>
+<div id="btns" class="hidden"><button class="alt" onclick="copy()">Copy</button><button class="alt" onclick="preview()">Preview in new tab</button></div>
+<p class="foot">Free tool by Ott — Apps Script &amp; CSS platforms · Custom builds: <a href="mailto:CONTACT" id="ce">CONTACT</a> · <a href="lightning:SharkSkin@coinos.io">Buy me a coffee ⚡</a></p>
+<script>
+var CONTACT="CONTACT"; // SETUP: replace with persona mailbox
+document.getElementById('ce').textContent=CONTACT;
+document.getElementById('ce').href="mailto:"+CONTACT;
+var SN={
+sidebar:
+"<!doctype html><html><head><meta name=viewport content=\"width=device-width,initial-scale=1\"><style>\n"+
+"/* Fallback: flex column. Upgrade: grid areas */\n"+
+".app{display:grid;gap:16px;min-height:100vh;padding:16px;grid-template-columns:1fr}\n"+
+"@media (min-width:720px){.app{grid-template-columns:240px 1fr}}\n"+
+".nav a{display:block;padding:8px 12px;border-radius:8px;color:#e6edf3;text-decoration:none;background:#161b22}\n"+
+".nav a[aria-current]{background:#238636}\n"+
+"main{background:#161b22;padding:20px;border-radius:12px}\n"+
+"</style></head><body>\n<div class=\"app\">\n  <nav class=\"nav\"><a href=\"#a\" aria-current=\"page\">Dashboard</a><a href=\"#b\">Projects</a><a href=\"#c\">Reports</a></nav>\n"+
+"  <main><h1>Dashboard</h1><p>Content pane.</p></main>\n</div>\n</body></html>\n\nNotes:\n- grid-template-columns collapses to one column below 720px — no JS.\n- Prefer @media on viewport for top-level app frames; use container queries for components.",
+cards:
+"<style>\n.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}\n.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:16px}\n.card h3{margin:0 0 8px}\n</style>\n<div class=\"cards\">\n  <div class=\"card\"><h3>Alpha</h3><p>…</p></div>\n  <div class=\"card\"><h3>Beta</h3><p>…</p></div>\n  <div class=\"card\"><h3>Gamma</h3><p>…</p></div>\n</div>\n\nNotes:\n- auto-fit vs auto-fill: auto-fit collapses empty tracks (fewer, wider cards). Choose deliberately.\n- minmax(220px,1fr) is the mobile-safe minimum; never use px-only repeat().",
+subgrid:
+"<style>\n.table{display:grid;grid-template-columns:120px 1fr 100px;gap:8px}\n.row{display:grid;grid-template-columns:subgrid;grid-column:1/-1}\n.row>span{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px}\n.head{font-weight:700;color:#8b949e}\n</style>\n<div class=\"table\">\n  <div class=\"row head\"><span>Service</span><span>Owner</span><span>Status</span></div>\n  <div class=\"row\"><span>auth</span><span>Juno</span><span>ok</span></div>\n  <div class=\"row\"><span>billing</span><span>Sena</span><span>ok</span></div>\n</div>\n\nNotes:\n- grid-template-columns:subgrid aligns child rows to the parent's tracks — the classic table fix.\n- Fallback for no-subgrid: give each .row the same grid-template-columns as .table.",
+container:
+"<style>\n.nav{container-type:inline-size}\n.nav ul{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0}\n.nav a{padding:8px 12px;background:#161b22;border-radius:8px;color:#e6edf3;text-decoration:none}\n@container (max-width:420px){\n  .nav ul{flex-direction:column}\n  .nav a{border-left:3px solid #238636}\n}\n/* wrapper that establishes the container */\n.panel{width:300px;background:#0d1117;padding:12px;border:1px dashed #30363d}\n</style>\n<div class=\"panel\">\n  <nav class=\"nav\"><ul><li><a>Docs</a></li><li><a>API</a></li><li><a>Status</a></li></ul></nav>\n</div>\n\nNotes:\n- container-type:inline-size makes .nav measure against the .panel, not the viewport.\n- Drag the .panel width in devtools: the nav reflows at 420px container width.",
+vtrans:
+"<!doctype html><html><head><meta name=viewport content=\"width=device-width,initial-scale=1\"><script src=\"https://unpkg.com/@view-transitions/api@0.1.2/view-transitions.js\"><\/script>\n<style>\nbody{background:#0d1117;color:#e6edf3;font-family:system-ui}\n.view{padding:24px;min-height:70vh}\nav a{margin-right:16px;color:#58a6ff}\n::view-transition-old(root),::view-transition-new(root){animation-duration:.25s}\n</style></head><body>\n<nav><a href=\"?p=a\" data-view-transition>A</a><a href=\"?p=b\" data-view-transition>B</a></nav>\n<div class=\"view\" id=\"view\"></div>\n<script>\nconst params=new URLSearchParams(location.search);\nconst p=params.get('p')||'a';\ndocument.getElementById('view').innerHTML='<h1>Page '+p+'</h1><p>This view fades/slides when you switch.</p>';\n<\/script>\n</body></html>\n\nNotes:\n- Polyfill from unpkg keeps old browsers on instant swap.\n- Keep the transition ≤300ms — long transitions read as loading, not motion."
+};
+var last="";
+function gen(){last=SN[document.getElementById('sc').value];var o=document.getElementById('out');o.textContent=last;o.classList.remove('hidden');document.getElementById('btns').classList.remove('hidden');}
+function copy(){navigator.clipboard.writeText(last);}
+function preview(){var w=window.open('','_blank');w.document.write(last);w.document.close();}
+</script></body></html>

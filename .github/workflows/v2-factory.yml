@@ -1,0 +1,53 @@
+name: v2-factory
+
+on:
+  repository_dispatch:
+    types: [v2-build, v2-video, v2-noop]
+  schedule:
+    # Sat & Sun 20:00 UTC = 22:00 Africa/Harare — weekend video job
+    - cron: '0 20 * * 6,0'
+
+permissions:
+  contents: read
+
+jobs:
+  noop:
+    if: github.event_name == 'repository_dispatch' && github.event.client_payload.type == 'v2-noop'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "v2-factory dispatch OK — pipeline reachable"
+
+  build:
+    if: github.event_name == 'repository_dispatch' && github.event.client_payload.type == 'v2-build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i --no-audit --no-fund --loglevel=error puppeteer-core
+      - name: Run manufacturing
+        env:
+          WEB_APP_URL: ${{ secrets.WEB_APP_URL }}
+          BRIDGE_SECRET: ${{ secrets.BRIDGE_SECRET }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          PAYLOAD: ${{ github.event.client_payload.asset_ids | tojson }}
+        run: node v2/actions/heavy-build-v2.js --op build
+
+  video:
+    if: github.event_name == 'schedule' || (github.event_name == 'repository_dispatch' && github.event.client_payload.type == 'v2-video')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i --no-audit --no-fund --loglevel=error puppeteer-core
+      - name: Render top-asset videos
+        env:
+          WEB_APP_URL: ${{ secrets.WEB_APP_URL }}
+          BRIDGE_SECRET: ${{ secrets.BRIDGE_SECRET }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+        run: node v2/actions/heavy-build-v2.js --op video

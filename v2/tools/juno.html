@@ -1,0 +1,88 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inference Cost &amp; Rate-Limit Calculator — Juno</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+main{max-width:900px;margin:0 auto}h1{font-size:22px}p.tag{color:#8b949e}
+input,select{background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px;border-radius:6px;width:100%;box-sizing:border-box;font:inherit}
+label{display:block;margin:10px 0 4px;font-size:13px;color:#8b949e}
+button{background:#238636;border:0;color:#fff;padding:10px 18px;border-radius:6px;font:inherit;cursor:pointer;margin-top:14px}
+button.alt{background:#21262d;border:1px solid #30363d}
+pre,table{background:#161b22;border:1px solid #30363d;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5}
+table td,table th{border:1px solid #30363d;padding:6px 10px;text-align:left}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.foot{margin-top:28px;font-size:12px;color:#8b949e;border-top:1px solid #21262d;padding-top:12px}
+a{color:#58a6ff}.hidden{display:none}
+</style></head><body><main>
+<h1>Inference Cost &amp; Rate-Limit Calculator</h1>
+<p class="tag">Turn token rates and prices into $/month, tokens/sec, p95 budget, and a working rate limiter. Free tool by Juno.</p>
+<div class="grid">
+<div><label>Requests per minute (rpm)</label><input id="rpm" type="number" value="120"></div>
+<div><label>Avg prompt tokens</label><input id="ptok" type="number" value="800"></div>
+<div><label>Avg completion tokens</label><input id="ctok" type="number" value="400"></div>
+<div><label>Price $ / 1M input tokens</label><input id="pin" type="number" step="0.01" value="0.60"></div>
+<div><label>Price $ / 1M output tokens</label><input id="pout" type="number" step="0.01" value="2.40"></div>
+<div><label>MS per generated token (your server)</label><input id="mspt" type="number" value="18"></div>
+</div>
+<button onclick="gen()">Calculate</button>
+<table id="tbl" class="hidden"></table>
+<pre id="out" class="hidden"></pre>
+<div id="btns" class="hidden"><button class="alt" onclick="copy()">Copy snippet</button></div>
+<p class="foot">Free tool by Juno — API data tools &amp; inference · Custom builds: <a href="mailto:CONTACT" id="ce">CONTACT</a> · <a href="lightning:SharkSkin@coinos.io">Buy me a coffee ⚡</a></p>
+<script>
+var CONTACT="CONTACT"; // SETUP: replace with persona mailbox
+document.getElementById('ce').textContent=CONTACT;
+document.getElementById('ce').href="mailto:"+CONTACT;
+function num(id){return parseFloat(document.getElementById(id).value)||0;}
+var lastCode="";
+function gen(){
+ var rpm=num('rpm'),p=num('ptok'),c=num('ctok'),pin=num('pin'),pout=num('pout'),mspt=num('mspt');
+ var perDay=rpm*1440, perMonth=perDay*30;
+ var usdDay=(perDay*p/1e6*pin)+(perDay*c/1e6*pout);
+ var tps=rpm*(p+c)/60;
+ var decodeMs=mspt*c;
+ var targetMs=Math.max(decodeMs*1.5,200);
+ var conc=Math.max(1,Math.ceil((rpm/60)*(decodeMs/1000)*1.2));
+ var burst=Math.max(1,Math.round(rpm/10)), refill=rpm/60;
+ var rows=[
+  ["Requests / day", perDay.toLocaleString()],
+  ["Requests / month", perMonth.toLocaleString()],
+  ["Cost / day","$"+usdDay.toFixed(2)],
+  ["Cost / month","$"+(usdDay*30).toFixed(2)],
+  ["Tokens / sec (in+out)", tps.toFixed(1)],
+  ["Est. decode time / request", decodeMs.toFixed(0)+" ms"],
+  ["Suggested p95 budget", targetMs.toFixed(0)+" ms"],
+  ["Concurrency to sustain p95", "≈"+conc+" in-flight"]
+ ];
+ var t=document.getElementById('tbl');
+ t.innerHTML="<tr><th>metric</th><th>value</th></tr>"+rows.map(function(r){return "<tr><td>"+r[0]+"</td><td>"+r[1]+"</td></tr>";}).join("");
+ t.classList.remove('hidden');
+ lastCode=
+"// Token bucket rate limiter — tuned for "+rpm+" rpm ("+refill.toFixed(2)+"/s refill)\n"+
+"function makeLimiter(refillPerSec, burst) {\n"+
+"  let tokens = burst;\n"+
+"  let last = Date.now();\n"+
+"  return function tryAcquire(n = 1) {\n"+
+"    const now = Date.now();\n"+
+"    tokens = Math.min(burst, tokens + ((now - last) / 1000) * refillPerSec);\n"+
+"    last = now;\n"+
+"    if (tokens >= n) { tokens -= n; return true; }\n"+
+"    return false;\n"+
+"  };\n"+
+"}\n\n"+
+"const limiter = makeLimiter("+refill.toFixed(2)+", "+burst+");\n"+
+"app.use('/inference', (req, res, next) => {\n"+
+"  if (!limiter()) {\n"+
+"    res.status(429).json({ error: 'rate_limited', retry_after_ms: 1000 });\n"+
+"    return;\n"+
+"  }\n"+
+"  res.set('X-RateLimit-Limit', '"+burst+"');\n"+
+"  res.set('X-RateLimit-Remaining', String(Math.floor(limiter.tokens)));\n"+
+"  next();\n"+
+"});\n\n"+
+"// SLO: p95 < "+targetMs.toFixed(0)+" ms → keep ≤ "+conc+" concurrent decodes.\n"+
+"// Monthly cost at "+rpm+" rpm: ~$"+(usdDay*30).toFixed(2)+" (input $"+pin+"/1M, output $"+pout+"/1M).";
+ var o=document.getElementById('out');o.textContent=lastCode;o.classList.remove('hidden');
+ document.getElementById('btns').classList.remove('hidden');
+}
+function copy(){navigator.clipboard.writeText(lastCode);}
+</script></body></html>

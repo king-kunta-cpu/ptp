@@ -1,0 +1,115 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI Scaffold Generator — Sable</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+main{max-width:900px;margin:0 auto}h1{font-size:22px}p.tag{color:#8b949e}
+input,select,textarea{background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px;border-radius:6px;width:100%;box-sizing:border-box;font:inherit}
+label{display:block;margin:10px 0 4px;font-size:13px;color:#8b949e}
+button{background:#238636;border:0;color:#fff;padding:10px 18px;border-radius:6px;font:inherit;cursor:pointer;margin-top:14px}
+button.alt{background:#21262d;border:1px solid #30363d}
+pre{background:#161b22;border:1px solid #30363d;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5}
+.row{display:flex;gap:8px}.row div{flex:1}
+.foot{margin-top:28px;font-size:12px;color:#8b949e;border-top:1px solid #21262d;padding-top:12px}
+a{color:#58a6ff}.hidden{display:none}
+</style></head><body><main>
+<h1>CLI Scaffold Generator</h1>
+<p class="tag">Production bash/python CLI: flags, exit codes, entry points, README. Free tool by Sable.</p>
+<label>Language</label><select id="lang"><option value="bash">bash</option><option value="python">python 3</option></select>
+<label>App name</label><input id="name" value="site-audit" placeholder="site-audit">
+<label>Description</label><input id="desc" value="Audits a site for SEO basics and prints a report">
+<label>Author (MIT header)</label><input id="author" value="Sable">
+<label>Flags</label><div id="flags"></div>
+<button class="alt" onclick="addFlag()">+ add flag</button>
+<button onclick="gen()">Generate</button>
+<pre id="out" class="hidden"></pre>
+<div id="btns" class="hidden"><button class="alt" onclick="copy()">Copy</button><button class="alt" onclick="dl()">Download</button></div>
+<p class="foot">Free tool by Sable — CLI automation &amp; SEO tools · Custom builds: <a href="mailto:CONTACT" id="ce">CONTACT</a> · <a href="lightning:SharkSkin@coinos.io">Buy me a coffee ⚡</a></p>
+<script>
+var CONTACT="CONTACT"; // SETUP: replace with persona mailbox
+document.getElementById('ce').textContent=CONTACT;
+document.getElementById('ce').href="mailto:"+CONTACT;
+var flags=[
+ {n:"url",t:"string",d:"",x:"Target site URL (required)"},
+ {n:"out",t:"string",d:"report.md",x:"Output file path"},
+ {n:"strict",t:"bool",d:"",x:"Exit 1 on any finding"}
+];
+function addFlag(){flags.push({n:"",t:"string",d:"",x:""});render();}
+function render(){
+ var el=document.getElementById('flags');el.innerHTML="";
+ flags.forEach(function(f,i){
+  var w=document.createElement('div');w.className="row";
+  w.innerHTML='<div><input placeholder="name" value="'+f.n+'"></div><div><select>'+
+   '<option value="string">string</option><option value="int">int</option><option value="bool">bool</option></select></div>'+
+   '<div><input placeholder="default" value="'+f.d+'"></div><div><input placeholder="help text" value="'+f.x+'"></div><div style="flex:0"><button class="alt" style="padding:6px 8px">x</button></div>';
+  var ins=w.querySelectorAll('input,select');
+  ins[0].oninput=function(){f.n=ins[0].value};ins[1].onchange=function(){f.t=ins[1].value};
+  ins[2].oninput=function(){f.d=ins[2].value};ins[3].oninput=function(){f.x=ins[3].value};
+  w.querySelector('.row > div:last-child button').onclick=function(){flags.splice(i,1);render();};
+  el.appendChild(w);
+ });
+}
+render();
+function bashOut(n,desc,author,fl){
+ var L=[];L.push("#!/usr/bin/env bash");L.push("# "+n+" — "+desc);L.push("# Copyright (c) "+author+" — MIT License");
+ L.push("set -euo pipefail");L.push("");L.push("VERSION=0.1.0");
+ L.push("usage() {");L.push("  cat <<EOF");L.push("  "+n+" v$VERSION");L.push("  "+desc);L.push("  ");
+ fl.forEach(function(f){L.push("  --"+f.n+"<"+(f.t==="bool"?"":" value")+">   "+f.x);});
+ L.push("  --help       Show this help");L.push("  --version    Print version");L.push("  EOF");L.push("  exit 2");L.push("}");
+ L.push("EXIT_USAGE=2; EXIT_ERROR=1");
+ L.push("");var vars=[];
+ fl.forEach(function(f){if(f.t!=="bool"){vars.push("  "+f.n+'="'+(f.d||'')+'"');}else{vars.push("  "+f.n+"=false");}});
+ L.push("main() {");L.push("  local args=()");
+ fl.forEach(function(f){if(f.t==="bool")L.push("  local "+f.n+"=false");});
+ L.push("  while [[ $# -gt 0 ]]; do");L.push("    case \"$1\" in");
+ fl.forEach(function(f){
+  if(f.t==="bool"){L.push("      --"+f.n+") "+f.n+"=true; shift ;;");}
+  else{L.push("      --"+f.n+") [[ $# -ge 2 ]] || { echo \"error: --"+f.n+" needs a value\" >&2; exit $EXIT_USAGE; }");
+   L.push("        "+f.n+"=\\\"$2\\\"; shift 2 ;;");}
+ });
+ L.push("      --help|-h) usage ;;");L.push("      --version) echo \"$VERSION\"; exit 0 ;;");
+ L.push("      *) echo \"error: unknown flag $1\" >&2; usage ;;");L.push("    esac");L.push("  done");
+ fl.forEach(function(f){if(f.t==="string"&&!f.d){L.push("  if [[ -z \"$"+f.n+"\" ]]; then echo \"error: --"+f.n+" is required\" >&2; exit $EXIT_USAGE; fi");}});
+ L.push("  # TODO: implement — return 0 on success, $EXIT_ERROR on failure");
+ L.push("  echo \"running "+n+"\"");L.push("  return 0");L.push("}");L.push("");L.push("main \"$@\"");
+ return L.join("\n");
+}
+function pyOut(n,desc,author,fl){
+ var L=[];L.push("#!/usr/bin/env python3");L.push('"""'+n+' — '+desc+'."""');L.push("# Copyright (c) "+author+" — MIT License");
+ L.push("from __future__ import annotations");L.push("import argparse, sys");L.push("");L.push("VERSION = \"0.1.0\"");
+ L.push("EXIT_ERROR = 1  # operational failure");L.push("EXIT_USAGE = 2  # bad arguments");
+ L.push("");L.push("def build_parser() -> argparse.ArgumentParser:");
+ L.push("    p = argparse.ArgumentParser(prog=\""+n+"\", description=\""+desc+"\")");
+ L.push("    p.add_argument(\"--version\", action=\"version\", version=VERSION)");
+ fl.forEach(function(f){
+  var line='    p.add_argument("--'+f.n+'"';
+  if(f.t==="bool")line+=', action="store_true"';
+  else{line+=', type='+(f.t==="int"?"int":"str")+(f.d?', default="'+f.d+'"':'');}
+  line+=', help="'+f.x+'")';L.push(line);
+ });
+ L.push("    return p");L.push("");
+ L.push("def main(argv: list[str] | None = None) -> int:");L.push("    p = build_parser()");L.push("    a = p.parse_args(argv)");
+ fl.forEach(function(f){if(f.t==="string"&&!f.d){L.push("    if not a."+f.n+":");L.push("        p.error(\"--"+f.n+" is required\")");}});
+ L.push("    # TODO: implement — return EXIT_ERROR on failure, 0 on success");L.push("    print(f\"running {n!s}\")");L.push("    return 0");L.push("");
+ L.push("if __name__ == \"__main__\":");L.push("    sys.exit(main())");
+ return L.join("\n");
+}
+function readme(n,desc,fl){
+ var L=["# "+n,"",desc,"","## Usage","```"];
+ fl.forEach(function(f){L.push(n+" --"+f.n+(f.t==="bool"?"":" <value>")+"  # "+f.x);});
+ L.push("```","","## Exit codes","","| code | meaning |","|------|---------|","| 0 | success |","| 1 | operational error |","| 2 | usage error |","","MIT License — "+new Date().getFullYear());
+ return L.join("\n");
+}
+var lastCode="";
+function gen(){
+ var n=document.getElementById('name').value.trim()||"my-cli";
+ var desc=document.getElementById('desc').value.trim()||"A command line tool";
+ var author=document.getElementById('author').value.trim()||"Sable";
+ var fl=flags.filter(function(f){return f.n.trim();});
+ if(!fl.length)fl=[{n:"input",t:"string",d:"",x:"Input path"}];
+ lastCode=(document.getElementById('lang').value==="bash"?bashOut:pyOut)(n,desc,author,fl)+"\n\n# ===== README.md =====\n"+readme(n,desc,fl);
+ var o=document.getElementById('out');o.textContent=lastCode;o.classList.remove('hidden');
+ document.getElementById('btns').classList.remove('hidden');
+}
+function copy(){navigator.clipboard.writeText(lastCode);}
+function dl(){var b=new Blob([lastCode],{type:"text/plain"});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(document.getElementById('name').value||"my-cli")+".txt";a.click();}
+</script></body></html>

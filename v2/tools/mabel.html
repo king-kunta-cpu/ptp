@@ -1,0 +1,111 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Client Onboarding Kit Generator — Mabel</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+main{max-width:900px;margin:0 auto}h1{font-size:22px}p.tag{color:#8b949e}
+input{background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px;border-radius:6px;width:100%;box-sizing:border-box;font:inherit}
+label{display:block;margin:10px 0 4px;font-size:13px;color:#8b949e}
+button{background:#238636;border:0;color:#fff;padding:10px 18px;border-radius:6px;font:inherit;cursor:pointer;margin-top:14px}
+button.alt{background:#21262d;border:1px solid #30363d}
+pre{background:#161b22;border:1px solid #30363d;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.6;white-space:pre-wrap}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.foot{margin-top:28px;font-size:12px;color:#8b949e;border-top:1px solid #21262d;padding-top:12px}
+a{color:#58a6ff}.hidden{display:none}
+</style></head><body><main>
+<h1>Client Onboarding Kit Generator</h1>
+<p class="tag">Onboarding email, scope checklist, invoice notes, revision policy, handoff list. Free tool by Mabel.</p>
+<div class="grid">
+<div><label>Client name</label><input id="client" value="Harper &amp; Co"></div>
+<div><label>Project</label><input id="proj" value="Website redesign + CMS setup"></div>
+<div><label>Rate $/week</label><input id="rate" type="number" value="600"></div>
+<div><label>Duration (weeks)</label><input id="weeks" type="number" value="4"></div>
+<div><label>Revision rounds included</label><input id="revisions" type="number" value="2"></div>
+<div><label>Payment split (e.g. 50/50)</label><input id="split" value="50/50"></div>
+</div>
+<label>Start date</label><input id="start" type="date">
+<button onclick="gen()">Generate kit</button>
+<pre id="out" class="hidden"></pre>
+<div id="btns" class="hidden"><button class="alt" onclick="copy()">Copy</button><button class="alt" onclick="dl()">Download .md</button></div>
+<p class="foot">Free tool by Mabel — Notion templates for freelancers · Custom builds: <a href="mailto:CONTACT" id="ce">CONTACT</a> · <a href="lightning:SharkSkin@coinos.io">Buy me a coffee ⚡</a></p>
+<script>
+var CONTACT="CONTACT"; // SETUP: replace with persona mailbox
+document.getElementById('ce').textContent=CONTACT;
+document.getElementById('ce').href="mailto:"+CONTACT;
+function money(n){return "$"+Number(n).toLocaleString();}
+function addWeeks(d,w){var x=new Date(d);x.setDate(x.getDate()+w*7);return x.toISOString().slice(0,10);}
+var lastMd="";
+function gen(){
+ var c=document.getElementById('client').value||"Client";
+ var p=document.getElementById('proj').value||"Project";
+ var rate=Number(document.getElementById('rate').value)||0;
+ var weeks=Number(document.getElementById('weeks').value)||1;
+ var rev=Number(document.getElementById('revisions').value)||1;
+ var split=document.getElementById('split').value||"50/50";
+ var total=rate*weeks;
+ var start=document.getElementById('start').value||new Date().toISOString().slice(0,10);
+ var end=addWeeks(start,weeks);
+ var parts=split.split('/').map(function(s){return parseInt(s,10)||0;});
+ var deposit=total*(parts[0]/100);
+ var L=[];
+ L.push("# Client Onboarding Kit — "+c);
+ L.push("");
+ L.push("## 1. Onboarding email (send after signed agreement)");
+ L.push("");
+ L.push("**Subject:** Kickoff — "+p+" (starts "+start+")");
+ L.push("");
+ L.push("Hi "+c.split(' ')[0]+",");
+ L.push("");
+ L.push("Great to have you on board. Here's how we'll work:");
+ L.push("");
+ L.push("- **Timeline:** "+start+" → "+end+" ("+weeks+" weeks)");
+ L.push("- **Communication:** async-first. One 30-min sync per week, booked by me. Anything urgent goes in the shared thread.");
+ L.push("- **What I need from you:** content, brand assets, and feedback within 3 business days per round (turnaround protects the timeline).");
+ L.push("- **Where work lives:** shared workspace — you'll get access today. You can watch progress anytime.");
+ L.push("- **Invoices:** "+split+" split. First invoice (deposit "+money(deposit)+") is attached. Work starts when the deposit clears.");
+ L.push("");
+ L.push("Reply with any questions before "+start+" and we're set.");
+ L.push("");
+ L.push("## 2. Scope & deliverables checklist");
+ L.push("");
+ L.push("- [ ] Discovery: goals, audience, references (week 1)");
+ L.push("- [ ] Moodboard / direction options (week 1)");
+ L.push("- [ ] " + p + " — build (weeks 2–" + Math.max(2,weeks-1) + ")");
+ L.push("- [ ] Revision round 1 (" + Math.max(2,weeks-1) + ")");
+ L.push("- [ ] Revision round 2 (" + weeks + ")");
+ L.push("- [ ] Handoff: files, credentials, notes (week " + weeks + ")");
+ L.push("");
+ L.push("Out of scope: copywriting beyond provided content, new tooling licenses, work after " + end + " (billed at " + money(rate) + "/week).");
+ L.push("");
+ L.push("## 3. Invoice notes");
+ L.push("");
+ L.push("- Total: " + money(total) + " = " + money(rate) + "/week × " + weeks + " weeks");
+ L.push("- Deposit (" + (parts[0]) + "%): " + money(deposit) + " — due before start");
+ L.push("- Final (" + (parts[1]||0) + "%): " + money(total-deposit) + " — due at handoff");
+ L.push("- Invoices are due net 7. A reminder goes out automatically on day 4.");
+ L.push("");
+ L.push("## 4. Revision policy (state it early)");
+ L.push("");
+ L.push("This project includes **"+rev+" full revision rounds**. A round = one consolidated feedback pass covering all open items. Small tweaks between rounds are free; a third full round or scope changes are billed at " + money(rate) + "/week. Consolidating feedback (one doc, one pass) is what keeps us on schedule.");
+ L.push("");
+ L.push("## 5. Moodboard structure");
+ L.push("");
+ L.push("Pages: `01 References (yours)` · `02 References (mine, by category)` · `03 Decisions (locked)` · `04 Out (rejected)`");
+ L.push("Rule: once a direction lands in `03 Decisions`, we don't revisit it without a scope conversation.");
+ L.push("");
+ L.push("## 6. Handoff checklist (week " + weeks + ")");
+ L.push("");
+ L.push("- [ ] All files exported (source + optimized)");
+ L.push("- [ ] Credentials shared via password manager, then rotated");
+ L.push("- [ ] Owner/admin roles set on the client's accounts");
+ L.push("- [ ] 1-page maintenance notes (how to edit, who to call)");
+ L.push("- [ ] 30-day check-in booked");
+ L.push("");
+ L.push("---");
+ L.push("Kit generated by Mabel's free tool · Custom onboarding systems: "+CONTACT);
+ lastMd=L.join("\n");
+ var o=document.getElementById('out');o.textContent=lastMd;o.classList.remove('hidden');
+ document.getElementById('btns').classList.remove('hidden');
+}
+function copy(){navigator.clipboard.writeText(lastMd);}
+function dl(){var b=new Blob([lastMd],{type:"text/markdown"});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download="onboarding-kit.md";a.click();}
+</script></body></html>

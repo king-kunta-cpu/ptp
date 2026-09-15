@@ -1,0 +1,101 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API Design Linter — Sena</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+main{max-width:900px;margin:0 auto}h1{font-size:22px}p.tag{color:#8b949e}
+textarea{background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:10px;border-radius:6px;width:100%;box-sizing:border-box;font:inherit;min-height:140px}
+label{display:block;margin:10px 0 4px;font-size:13px;color:#8b949e}
+button{background:#238636;border:0;color:#fff;padding:10px 18px;border-radius:6px;font:inherit;cursor:pointer;margin-top:14px}
+button.alt{background:#21262d;border:1px solid #30363d}
+pre{background:#161b22;border:1px solid #30363d;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5;white-space:pre-wrap}
+.foot{margin-top:28px;font-size:12px;color:#8b949e;border-top:1px solid #21262d;padding-top:12px}
+a{color:#58a6ff}.hidden{display:none}.score{font-size:20px;color:#3fb950}
+</style></head><body><main>
+<h1>API Design Linter</h1>
+<p class="tag">Paste your endpoints → idempotency, pagination, rate limits, webhook retries, error shape. Free tool by Sena.</p>
+<label>Endpoints (one per line: METHOD /path)</label>
+<textarea id="eps">GET /api/v1/orders
+POST /api/v1/orders
+POST /api/v1/orders/{id}/pay
+GET /api/v1/users/me
+POST /webhooks/payments
+PUT /api/v1/settings</textarea>
+<button onclick="gen()">Lint</button>
+<p>Score: <span id="score" class="score hidden"></span></p>
+<pre id="out" class="hidden"></pre>
+<div id="btns" class="hidden"><button class="alt" onclick="copy()">Copy</button></div>
+<p class="foot">Free tool by Sena — Sheets &amp; API design · Custom builds: <a href="mailto:CONTACT" id="ce">CONTACT</a> · <a href="lightning:SharkSkin@coinos.io">Buy me a coffee ⚡</a></p>
+<script>
+var CONTACT="CONTACT"; // SETUP: replace with persona mailbox
+document.getElementById('ce').textContent=CONTACT;
+document.getElementById('ce').href="mailto:"+CONTACT;
+function lint(ep){
+ var m=ep.match(/^(GET|POST|PUT|PATCH|DELETE)\s+(\S+)/i);
+ if(!m)return null;
+ var method=m[1].toUpperCase(),path=m[2].toLowerCase();
+ var checks=[];
+ function c(name,ok,why){checks.push({n:name,ok:ok,why:why});}
+ var isList=/\/(orders|users|items|reports|payments|products|invoices|assets|logs)\b/.test(path)&&method==="GET";
+ var isWebhook=/webhook|hook|callback/.test(path);
+ var isCreate=method==="POST"&&!/\{/.test(path)&&!isWebhook;
+ if(isWebhook){
+  c("Webhook: document retry policy (e.g. 15s,1m,5m,30m,2h backoff)",false,"webhooks need a stated retry schedule");
+  c("Webhook: signature header (X-Signature) + timestamp",false,"verify HMAC on every delivery");
+  c("Webhook: consumer returns 2xx fast, processes async",false,"slow 200s stall the sender");
+ }
+ if(isCreate){
+  c("Idempotency-Key header accepted",false,"clients retry POSTs; key makes retries safe");
+  c("Responds 201 + Location header",false,"creation should point at the resource");
+ }
+ if(method==="PUT"||method==="PATCH"){
+  c("Idempotency-Key or If-Match (ETag) supported",false,"concurrent edits need conflict detection");
+ }
+ if(isList){
+  c("Cursor pagination (cursor + limit, not offset)",false,"offset drifts as rows change; cursor is stable");
+  c("limit capped (e.g. max 100)",false,"unbounded lists = timeout bombs");
+ }
+ c("Versioned path (/v1)",path.indexOf("/v")===0||/\/v\d/.test(path),"unversioned APIs can't evolve");
+ c("Rate-limit headers documented (X-RateLimit-Limit/Remaining/Reset)",false,"clients can't back off without them");
+ c("Error shape: {code, message, request_id}",false,"stable machine codes + request id for support");
+ return{ep:ep,checks:checks};
+}
+var lastMd="";
+function gen(){
+ var lines=document.getElementById('eps').value.split(/\n/).map(function(s){return s.trim();}).filter(Boolean);
+ var all=[],pass=0,total=0;
+ lines.forEach(function(line){
+  var r=lint(line);
+  if(!r){all.push("⚠  couldn't parse: "+line);return;}
+  all.push("## "+r.ep,"");
+  r.checks.forEach(function(ch){
+   total++;if(ch.ok)pass++;
+   all.push((ch.ok?"✅ ":"❌ ")+ch.n+(ch.ok?"":"  — "+ch.why));
+  });
+  all.push("");
+ });
+ var score=total?Math.round(100*pass/total):0;
+ all.unshift("API Lint — score "+score+"/100 ("+pass+" of "+total+" checks)","","");
+ all.push("---","");
+ all.push("Reference response shape:");
+ all.push("```json");
+ all.push("{ \"code\": \"order_not_found\", \"message\": \"No order with id 42\", \"request_id\": \"req_01J9ZK...\" }");
+ all.push("```");
+ all.push("");
+ all.push("Reference idempotency contract:");
+ all.push("```");
+ all.push("POST /api/v1/orders");
+ all.push("Idempotency-Key: 72a5a…8f3b");
+ all.push("→ 201 Created   (first call)");
+ all.push("→ 201 Created   (retry, same key, same request)");
+ all.push("→ 422 conflict  (same key, different body)");
+ all.push("```");
+ all.push("");
+ all.push("---");
+ all.push("Linted by Sena's free tool · Custom API audits: "+CONTACT);
+ lastMd=all.join("\n");
+ var s=document.getElementById('score');s.textContent=score+"/100";s.classList.remove('hidden');
+ var o=document.getElementById('out');o.textContent=lastMd;o.classList.remove('hidden');
+ document.getElementById('btns').classList.remove('hidden');
+}
+function copy(){navigator.clipboard.writeText(lastMd);}
+</script></body></html>

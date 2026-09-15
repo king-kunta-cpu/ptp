@@ -1,0 +1,108 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Homelab Config Generator — Ravi</title>
+<style>
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+main{max-width:900px;margin:0 auto}h1{font-size:22px}p.tag{color:#8b949e}
+input{background:#161b22;border:1px solid #30363d;color:#e6edf3;padding:8px;border-radius:6px;width:100%;box-sizing:border-box;font:inherit}
+label{display:block;margin:10px 0 4px;font-size:13px;color:#8b949e}
+button{background:#238636;border:0;color:#fff;padding:10px 18px;border-radius:6px;font:inherit;cursor:pointer;margin-top:14px}
+button.alt{background:#21262d;border:1px solid #30363d;padding:6px 10px}
+pre{background:#161b22;border:1px solid #30363d;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5}
+.row{display:flex;gap:8px}.row div{flex:1}
+.h{margin:18px 0 4px;font-size:14px;color:#58a6ff}
+.foot{margin-top:28px;font-size:12px;color:#8b949e;border-top:1px solid #21262d;padding-top:12px}
+a{color:#58a6ff}.hidden{display:none}
+</style></head><body><main>
+<h1>Homelab Config Generator</h1>
+<p class="tag">VLANs, WireGuard peers, docker compose, nginx, systemd — one coherent set. Free tool by Ravi.</p>
+<div class="row"><div><label>Server hostname</label><input id="host" value="home1"></div></div>
+<div class="row"><div><label>Management VLAN id</label><input id="vlanMgmt" value="10"></div></div>
+<h3 class="h">VLANs</h3><div id="vlans"></div><button class="alt" onclick="addVlan()">+ vlan</button>
+<h3 class="h">WireGuard peers</h3><div id="peers"></div><button class="alt" onclick="addPeer()">+ peer</button>
+<h3 class="h">Services (docker)</h3><div id="svcs"></div><button class="alt" onclick="addSvc()">+ service</button>
+<button onclick="gen()">Generate configs</button>
+<pre id="out" class="hidden"></pre>
+<div id="btns" class="hidden"><button class="alt" onclick="copy()">Copy all</button><button class="alt" onclick="dl()">Download .md</button></div>
+<p class="foot">Free tool by Ravi — self-hosted &amp; homelab · Custom builds: <a href="mailto:CONTACT" id="ce">CONTACT</a> · <a href="lightning:SharkSkin@coinos.io">Buy me a coffee ⚡</a></p>
+<script>
+var CONTACT="CONTACT"; // SETUP: replace with persona mailbox
+document.getElementById('ce').textContent=CONTACT;
+document.getElementById('ce').href="mailto:"+CONTACT;
+var vlans=[{id:"20",name:"lab"},{id:"30",name:"iot"}];
+var peers=[{name:"laptop",ip:"10.66.66.2",key:"PASTE_PUBLIC_KEY"}];
+var svcs=[{name:"dashy",image:"lissy93/dashy:latest",port:"4000"},{name:"heimdall",image:"homepage/heimdall:latest",port:"4001"}];
+function renderList(el,items,cols,onchange){
+ el.innerHTML="";
+ items.forEach(function(it,i){
+  var w=document.createElement('div');w.className="row";
+  cols.forEach(function(c,j){w.innerHTML+="<div><input value='"+it[c]+"' placeholder='"+c+"'></div>";});
+  w.innerHTML+="<div style='flex:0'><button class='alt'>x</button></div>";
+  var ins=w.querySelectorAll("input");
+  cols.forEach(function(c,j){ins[j].oninput=function(){it[c]=ins[j].value;};});
+  w.querySelector("button").onclick=function(){items.splice(i,1);renderList(el,items,cols);};
+  el.appendChild(w);
+ });
+}
+function addVlan(){vlans.push({id:"",name:""});renderList(document.getElementById('vlans'),vlans,["id","name"]);}
+function addPeer(){peers.push({name:"",ip:"",key:"PASTE_PUBLIC_KEY"});renderList(document.getElementById('peers'),peers,["name","ip","key"]);}
+function addSvc(){svcs.push({name:"",image:"",port:""});renderList(document.getElementById('svcs'),svcs,["name","image","port"]);}
+renderList(document.getElementById('vlans'),vlans,["id","name"]);
+renderList(document.getElementById('peers'),peers,["name","ip","key"]);
+renderList(document.getElementById('svcs'),svcs,["name","image","port"]);
+var lastMd="";
+function gen(){
+ var h=document.getElementById('host').value||"home1";
+ var mgmt=document.getElementById('vlanMgmt').value||"10";
+ var L=["# Homelab config set — "+h,"generated "+new Date().toISOString().slice(0,10),""];
+ L.push("## 1. VLANs (switch)");L.push("```");
+ vlans.forEach(function(v){if(v.id)L.push("vlan "+v.id+"  # "+(v.name||""));});
+ L.push("interface Port1  # uplink/router");L.push("  switchport mode trunk");L.push("  switchport trunk allowed vlan "+[mgmt].concat(vlans.map(function(v){return v.id;}).filter(Boolean)).join(","));
+ L.push("```","");
+ L.push("## 2. WireGuard — /etc/wireguard/wg0.conf");L.push("```");
+ L.push("[Interface]");L.push("Address = 10.66.66.1/24");L.push("ListenPort = 51820");L.push("PrivateKey = <SERVER_PRIVATE_KEY>");L.push("PostUp = iptables -I FORWARD -i %i -j ACCEPT && iptables -I FORWARD -o %i -j ACCEPT && iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE");
+ L.push("PostDown = iptables -D FORWARD -i %i -j ACCEPT && iptables -D FORWARD -o %i -j ACCEPT && iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE");
+ peers.forEach(function(p){if(p.name){L.push("","[Peer]  # "+p.name);L.push("PublicKey = "+(p.key||"PASTE_PUBLIC_KEY"));L.push("AllowedIPs = "+(p.ip||"10.66.66.0")+"/32");}});
+ L.push("```","");
+ L.push("## 3. docker-compose.yml");L.push("```yaml");
+ L.push("services:");
+ svcs.forEach(function(s){if(s.name){
+  L.push("  "+s.name+":");
+  L.push("    image: "+(s.image||"nginx"));
+  L.push("    container_name: "+h+"-"+s.name);
+  L.push("    restart: unless-stopped");
+  if(s.port)L.push("    ports:\n      - \""+s.port+":"+s.port+"\"");
+  L.push("    networks: [lab]");
+ }});
+ L.push("networks:\n  lab:\n    driver: bridge");
+ L.push("```","");
+ L.push("## 4. nginx reverse proxy — /etc/nginx/sites-available/"+h);L.push("```");
+ L.push("map $host $frontend { default "+h+".local; }");
+ svcs.forEach(function(s){if(s.name&&s.port){
+  L.push("server {");
+  L.push("  listen 80;");
+  L.push("  server_name "+s.name+"."+h+".local;");
+  L.push("  location / { proxy_pass http://127.0.0.1:"+s.port+"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; }");
+  L.push("}");
+ }});
+ L.push("```","");
+ L.push("## 5. systemd — WireGuard + fail2ban basics");L.push("```");
+ L.push("sudo systemctl enable --now wg-quick@wg0");
+ L.push("sudo ufw allow 51820/udp && sudo ufw enable");
+ L.push("```","");
+ L.push("## 6. First-boot checklist");L.push("");
+ L.push("- [ ] static IP / DHCP reservation for "+h+" on VLAN "+mgmt);
+ L.push("- [ ] SSH key-only + disable password auth (sshd_config)");
+ L.push("- [ ] unattended-upgrades or apt-daily enabled");
+ L.push("- [ ] logrotate tuned (docker logs → journald, 7 days)");
+ L.push("- [ ] backup: disk image + configs (this file!) off-machine");
+ L.push("- [ ] monitoring: uptime-kuma or healthchecks.io ping from a service");
+ L.push("");
+ L.push("---");
+ L.push("Generated by Ravi's free tool · Custom homelab setups: "+CONTACT);
+ lastMd=L.join("\n");
+ var o=document.getElementById('out');o.textContent=lastMd;o.classList.remove('hidden');
+ document.getElementById('btns').classList.remove('hidden');
+}
+function copy(){navigator.clipboard.writeText(lastMd);}
+function dl(){var b=new Blob([lastMd],{type:"text/markdown"});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=h+".homelab.md";a.click();}
+</script></body></html>
